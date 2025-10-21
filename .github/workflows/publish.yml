@@ -1,7 +1,8 @@
 name: GigaChat request and publish
 
 on:
-  workflow_dispatch:  # вручную запускать
+  workflow_dispatch:  # запуск вручную
+
 jobs:
   run:
     runs-on: ubuntu-latest
