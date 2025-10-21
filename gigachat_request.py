@@ -1,33 +1,84 @@
+# gigachat_request.py
+# Полностью автономный запрос к GigaChat API с автоматическим получением токена
+import os
 import json
 import requests
-import os
+import base64
 
+# === Конфигурация ===
+OAUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
-def main():
-    api_key = os.getenv("GIGACHAT_API_KEY")
-    if not api_key:
-        raise Exception("GIGACHAT_API_KEY not set in secrets")
+def get_access_token():
+    """Получает новый токен GigaChat с использованием client_id и client_secret"""
+    client_id = os.getenv("GIGACHAT_CLIENT_ID")
+    client_secret = os.getenv("GIGACHAT_CLIENT_SECRET")
 
-    messages = [{"role": "user", "content": "Привет, кто ты?"}]
+    if not client_id or not client_secret:
+        raise Exception("❌ Client ID или Client Secret не заданы в секретах GitHub")
+
+    # Кодируем client_id и client_secret в Base64 для Basic Auth
+    creds = base64.b64encode(f"{client_id}:{client_secret}".encode()).decode()
+
+    print("🔐 Получаю новый токен...")
+    response = requests.post(
+        OAUTH_URL,
+        headers={"Authorization": f"Basic {creds}"},
+        data={"scope": "GIGACHAT_API_CORP"},
+        verify=False  # отключаем проверку сертификатов Минцифры
+    )
+
+    if response.status_code != 200:
+        raise Exception(f"Ошибка при получении токена: {response.status_code} {response.text}")
+
+    token = response.json().get("access_token")
+    if not token:
+        raise Exception("⚠️ Не удалось извлечь access_token из ответа")
+    
+    print("✅ Токен успешно получен")
+    return token
+
+
+def query_gigachat(prompt):
+    """Отправляет сообщение в GigaChat"""
+    token = get_access_token()
+
     headers = {
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
     }
-    payload = {
+
+    data = {
         "model": "GigaChat-2-Max",
         "scope": "GIGACHAT_API_CORP",
-        "messages": messages,
+        "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 512
     }
 
-    print("🚀 Отправляю запрос к GigaChat...")
-    r = requests.post(API_URL, headers=headers, json=payload, verify=False)
-    print("✅ Ответ получен:", r.status_code)
+    print(f"🚀 Отправляю запрос к GigaChat: {prompt[:50]}...")
+    response = requests.post(API_URL, headers=headers, json=data, verify=False)
 
-    # Сохраняем ответ в файл для публикации
-    with open("result.json", "w", encoding="utf-8") as f:
-        json.dump(r.json(), f, ensure_ascii=False, indent=2)
+    print(f"🔍 Код ответа: {response.status_code}")
+    if response.status_code != 200:
+        raise Exception(f"Ошибка при обращении к GigaChat: {response.text}")
+
+    result = response.json()
+    print("✅ Ответ успешно получен")
+    return result
+
+
+def main():
+    """Основная функция — выполняет запрос и сохраняет результат"""
+    try:
+        result = query_gigachat("Привет! Кто ты?")
+        with open("result.json", "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        print("📄 Результат сохранён в result.json")
+    except Exception as e:
+        print("❌ Ошибка:", str(e))
+        with open("result.json", "w", encoding="utf-8") as f:
+            json.dump({"error": str(e)}, f, ensure_ascii=False, indent=2)
+
 
 if __name__ == "__main__":
     main()

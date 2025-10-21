@@ -1,4 +1,3 @@
 {
-  "status": 401,
-  "message": "Unauthorized"
+  "error": "❌ Client ID или Client Secret не заданы в секретах GitHub"
 }
